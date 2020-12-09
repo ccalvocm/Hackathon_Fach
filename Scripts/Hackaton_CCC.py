@@ -107,12 +107,12 @@ def calc_mask(mask, lon, lat, shp_lon, shp_lat):
 #cob_glacial = 'ls8_sr_2013_2013_.nc'
                 
                 
-os.chdir('./home/carlos/Downloads')
+os.chdir('/home/carlos/Downloads')
 import rioxarray
 import xarray
 from shapely.geometry import mapping
 
-test = xarray.open_dataset('ls8_sr_2013_2020_glaciar (1).nc')
+test = xarray.open_dataset('ls8_sr_2013_2013_.nc')
 MSWEP_monthly2 = test['nir_swir']
 MSWEP_monthly2.rio.set_spatial_dims(x_dim="x", y_dim="y", inplace=True)
 MSWEP_monthly2.rio.write_crs("epsg:32719", inplace=True)
@@ -122,42 +122,31 @@ clipped = MSWEP_monthly2.rio.clip(Africa_Shape.geometry.apply(mapping), Africa_S
 
 
 cob_glacial = 'ls8_sr_2013_2020_glaciar (1).nc'
-glaciares = Dataset(cob_glacial, mode = 'r')
+glaciares = xarray.open_dataset(cob_glacial)
 nirswir = glaciares['nir_swir']
+nirswir.rio.set_spatial_dims(x_dim="x", y_dim="y", inplace=True)
+nirswir.rio.write_crs("epsg:32719", inplace=True)
+
+############# Read shapefile and first feature
+Cuenca_Shape = geopandas.read_file('Rio_Olivares.shp', crs="epsg:32719")
+
+
 tiempo = pd.read_csv('./time_2013_2020.csv',index_col = 0, parse_dates = True)
 img_nubosas_sombra = np.zeros((len(tiempo.index)))
 areas_glaciares = np.zeros((len(tiempo.index)))
    
-############# Read shapefile and first feature
-fc = fiona.open("Rio_Olivares.shp")
-feature = next(iter(fc))
-
-############# Extract array of lat/lon coordinates:
-coords = feature['geometry']['coordinates'][0]
-shp_lon = np.array(coords)[:,0]
-shp_lat = np.array(coords)[:,1]
-
-############# Read NetCDF variables, shifting the longitudes
-nc_lon = glaciares['x'][:]
-nc_lat = glaciares['y'][:][:]
+############# Read NetCDF variables
 
 for i in range(3): 
     nc_ua  = nirswir[i,:,:]
-    nc_ua[nc_ua < 20] = np.nan
+    nc_ua = nc_ua.where(nc_ua >= 2, other=np.nan) 
 
     ############# Calculate mask
-    mask = np.zeros_like(nc_ua, dtype=bool)
-    calc_mask(mask, nc_lon, nc_lat, shp_lon, shp_lat)
     
-    ############# Mask the data array
-    nc_ua_masked = np.ma.masked_where(~mask, nc_ua)
-    
-#    plt.pcolormesh(nc_lon, nc_lat, nc_ua_masked, vmin = 2, vmax = 30)
-    ############# area pixeles dentro de la cuenca############# 
-    #area_cuenca = 900*np.count_nonzero(mask)/1_000_000
+    clipped = nc_ua.rio.clip(Cuenca_Shape.geometry.apply(mapping), Cuenca_Shape.crs, drop=False)
     
     #numero pixeles glaciar dentro de la cuenca
-    area_glaciar = np.count_nonzero(~np.isnan(nc_ua_masked))*900/1e6
+    area_glaciar = np.count_nonzero(~np.isnan(clipped))*900/1e6
     areas_glaciares[i] = area_glaciar
 #plt.imshow(mask_cuenca['Band1'])
 # cargar DEM ALOS-PALSAR
