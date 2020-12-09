@@ -41,7 +41,7 @@ areas_glaciares = np.zeros((len(tiempo.index)))
    
 ############# Read NetCDF variables
 
-for i in range(3): 
+for i in range(len(tiempo)): 
     nc_ua  = nirswir[i,:,:]
     nc_ua = nc_ua.where(nc_ua >= 2, other=np.nan) 
 
