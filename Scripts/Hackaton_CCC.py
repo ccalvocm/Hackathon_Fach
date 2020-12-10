@@ -34,27 +34,28 @@ def main():
     cob_glacial = 'ls8_toa_2013_2020_glaciar.nc'
     glaciares = xarray.open_dataset(cob_glacial)
     nirswir = glaciares['nir_swir']
-    swir1 = glaciares['swir1']
+    times = pd.read_csv('./time_2013_2020_toa.csv',index_col = 0, parse_dates = True).index
+    # assign times
+    
+    nirswir = nirswir.assign_coords(time = times)
+        
     #coordenadas
     nirswir.rio.set_spatial_dims(x_dim="x", y_dim="y", inplace=True)
     nirswir.rio.write_crs("epsg:32719", inplace=True)
     
     ############# Read shapefile and first feature
-    Cuenca_Shape = geopandas.read_file('Rio_Olivares.shp', crs="epsg:32719")
-    catastro_DGA = geopandas.read_file('glaciares.shp', crs="epsg:32719")
+    cobertura_nival = geopandas.read_file('glaciares.shp', crs="epsg:32719")
     
-    tiempo = pd.read_csv('./time_2013_2020.csv',index_col = 0, parse_dates = True)
-    tiempo = pd.read_csv('./time_2013_2020_toa.csv',index_col = 0, parse_dates = True)
-    img_nubosas_sombra = np.zeros((len(tiempo.index)))
-    areas_glaciares = np.zeros((len(tiempo.index)))
-    flags = np.zeros((len(tiempo.index)))
+#    img_nubosas_sombra = np.zeros((len(tiempo.index)))
+    areas_glaciares = np.zeros((len(times)))
+#    flags = np.zeros((len(tiempo.index)))
        
     ############# Read NetCDF variables
     default = 2
     dicc = {1 : default, 2: default, 3: default ,4: default ,5: default , 6: 2.2, 7: 2.1, 8: 3, 
             9: 1.9, 10: default, 11: 1.9, 12: 1.5}
     #for i in range(round(len(tiempo[0:41]))): 
-    for i in range(round(len(tiempo))): 
+    for i in range(round(len(times))): 
     
     
         nc_ua  = nirswir[i,:,:]
@@ -67,19 +68,20 @@ def main():
     #    if len(swir1_flag) > 1e2:
     #        areas_glaciares[i] = np.nan
     #        continue
-    #    else:
-    
-        thres = dicc[tiempo.index[i].month]
-    #        thres = 2
-        nc_ua = nc_ua.where(((nc_ua >= thres) & (nc_ua <= 15)), other=np.nan) 
+#    #    else:
+#        result = gaussian_filter(nc_ua, sigma=.5)
+#        nc_ua.values = result  
         
-        result = gaussian_filter(nc_ua, sigma=.5)
-        nc_ua.values = result
+        thres = dicc[times[i].month]
+        thres = 4
+        nc_ua = nc_ua.where(((nc_ua >= thres)), other=np.nan) 
+        
+
 #        plt.imshow(nc_ua, vmin = 2, vmax = 15)
     ############# Calculate mask
     
     #        clipped = nc_ua.rio.clip(Cuenca_Shape.geometry.apply(mapping), Cuenca_Shape.crs, drop=False)
-        clipped = nc_ua.rio.clip(catastro_DGA.geometry.apply(mapping), catastro_DGA.crs, drop=False)
+        clipped = nc_ua.rio.clip(cobertura_nival.geometry.apply(mapping), cobertura_nival.crs, drop=False)
     
     #numero pixeles glaciar dentro de la cuenca
         area_glaciar = np.count_nonzero(~np.isnan(clipped))*900/1e6
@@ -87,16 +89,26 @@ def main():
         gc.collect()
         del nc_ua
     #    del a
-            
+  #%%          
     plt.close("all")
-    plot_areas = pd.DataFrame(areas_glaciares, index = tiempo.index)
+    plot_areas = pd.DataFrame(areas_glaciares, index = times)
     plot_areas.columns = ['Area']
-    rolling_windows = plot_areas.rolling(16, min_periods=1)
-    plot_areas_mm = rolling_windows.mean().plot()
-    plot_areas_mm.set_ylabel('Cobertura glaciar ($km^2$)')
-    plot_areas_mm.set_xlabel('')
-    plt.grid()
+    plot_areas = plot_areas[plot_areas['Area'] > 20]
+    ax = plot_areas.rolling(1).mean().plot(rot = 90)
+#     xlabel = plot_areas.index.strftime("%b %Y").to_list(), rot = 90
+#    ax.set_xticks(plot_areas.index, times.strftime("%b %Y").to_list(), rotation = 90)
+#    rolling_windows = plot_areas.rolling(15, min_periods=1)
+#    plot_areas_mm = rolling_windows.mean().plot()
+    ax.set_ylabel('Cobertura glaciar ($km^2$)')
+    ax.set_xlabel('')
+    ax.set_ylim(bottom =0)
+    ax.grid()
+    #%%
 
+    plt.close("all")
+    plt.plot(plot_areas.index.strftime("%b %Y"), plot_areas['Area'])
+    plt.xticks(rotation=90)
+    plt.grid()
 #%%
 def pruebas():
     #%%
