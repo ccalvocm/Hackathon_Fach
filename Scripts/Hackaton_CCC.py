@@ -59,28 +59,16 @@ def main():
     
     
         nc_ua  = nirswir[i,:,:]
-          
-    #    a = ndimage.interpolation.zoom(nc_ua,.5)  # (20, 40)
-    
-    
-    #    swir1_flag = swir1[i,:,:].values[swir1[i,:,:].values == -9999]
-    #    flags[i] = len(swir1_flag)
-    #    if len(swir1_flag) > 1e2:
-    #        areas_glaciares[i] = np.nan
-    #        continue
-#    #    else:
-#        result = gaussian_filter(nc_ua, sigma=.5)
+            
+#        result = gaussian_filter(nc_ua, sigma=2)
 #        nc_ua.values = result  
         
         thres = dicc[times[i].month]
-        thres = 4
+        thres = 5
         nc_ua = nc_ua.where(((nc_ua >= thres)), other=np.nan) 
         
-
-#        plt.imshow(nc_ua, vmin = 2, vmax = 15)
     ############# Calculate mask
     
-    #        clipped = nc_ua.rio.clip(Cuenca_Shape.geometry.apply(mapping), Cuenca_Shape.crs, drop=False)
         clipped = nc_ua.rio.clip(cobertura_nival.geometry.apply(mapping), cobertura_nival.crs, drop=False)
     
     #numero pixeles glaciar dentro de la cuenca
@@ -103,19 +91,3 @@ def main():
     ax.set_xlabel('')
     ax.set_ylim(bottom =0)
     ax.grid()
-    #%%
-
-    plt.close("all")
-    plt.plot(plot_areas.index.strftime("%b %Y"), plot_areas['Area'])
-    plt.xticks(rotation=90)
-    plt.grid()
-#%%
-def pruebas():
-    #%%
-    from scipy.ndimage import gaussian_filter
-
-    from scipy import misc
-    import matplotlib.pyplot as plt
-    
-    result = gaussian_filter(nc_ua, sigma=5)
-    nc_ua.values = result
