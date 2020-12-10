@@ -7,33 +7,29 @@ Created on Mon Dec  7 23:00:30 2020
 """
 
 # importar librerias
-import os
-import geopandas
-from matplotlib import pyplot as plt
-import rasterio
-import numpy as np
-import pandas as pd
-from cdo import Cdo
-import gc
-from scipy.ndimage import gaussian_filter
 
-
-#%% Acotar Xarray de la cuenca
-       
-os.chdir('/home/carlos/Downloads')
-import rioxarray
-import xarray
-from shapely.geometry import mapping
 
 #%%
-def main():
+def main(folder = '/home/carlos/Downloads', nc_cloud = 'ls8_toa_2013_2020_icesnow.nc' , nc_glaciar = 'ls8_toa_2013_2020_glaciar.nc', df_times = './time_2013_2020_toa.csv'):
     #%%
-   
-    cob_nieve = 'ls8_toa_2013_2020_icesnow.nc'
-    cob_glacial = 'ls8_toa_2013_2020_glaciar.nc'
+    
+    import geopandas
+    from matplotlib import pyplot as plt
+    import rasterio
+    import numpy as np
+    import pandas as pd
+    from cdo import Cdo
+    import gc
+    from scipy.ndimage import gaussian_filter
+    import rioxarray
+    import xarray
+    from shapely.geometry import mapping
+
+    cob_nieve = folder + '//'+ nc_cloud
+    cob_glacial = folder + '//'+ nc_glaciar
     nieve = xarray.open_dataset(cob_nieve)['pixel_qa']
     nirswir = xarray.open_dataset(cob_glacial)['nir_swir']
-    times = pd.read_csv('./time_2013_2020_toa.csv',index_col = 0, parse_dates = True).index
+    times = pd.read_csv(folder + '//'+ df_times,index_col = 0, parse_dates = True).index
     # assign times
     
     nirswir = nirswir.assign_coords(time = times)
@@ -46,12 +42,9 @@ def main():
     nieve.rio.set_spatial_dims(x_dim="x", y_dim="y", inplace=True)
     nieve.rio.write_crs("epsg:32719", inplace=True)    
     ############# Read shapefile and first feature
-    cobertura_nival = geopandas.read_file('glaciares.shp', crs="epsg:32719")
-#    cobertura_nival = geopandas.read_file('Rio_Olivares.shp', crs="epsg:32719")
+    cobertura_nival = geopandas.read_file(folder + '//'+'glaciares.shp', crs="epsg:32719")
     
-#    img_nubosas_sombra = np.zeros((len(tiempo.index)))
     areas_glaciares = np.zeros((len(times)))
-#    flags = np.zeros((len(tiempo.index)))
        
     ############# Read NetCDF variables
     default = 2
@@ -68,7 +61,9 @@ def main():
 #        nc_ua.values = result  
         
         thres = dicc[times[i].month]
-        thres = 4
+        thres = 3
+        
+        #Filtrado de nubes y relleno
         
         nc_ua = nc_ua.where(~snow.isin([352, 368, 416, 432, 480, 864, 880, 928, 944, 992]), other=np.nan) 
         try:
@@ -79,11 +74,11 @@ def main():
             continue
         nc_ua = nc_ua.where(snow.isin([336, 368, 400, 432, 848, 880, 912, 944, 1352, 324, 388, 836, 900, 1348]), other=np.nan) 
     
+        # filtrado de glaciares
         nc_ua = nc_ua.where(((nc_ua >= thres)), other=np.nan) 
 
-#        328, 392, 840, 904, 1350, 352, 368, 416, 432, 480, 864, 880, 928, 944, 992
         
-    ############# Calculate mask
+    ############# Calculate mask cuenca
     
         clipped = nc_ua.rio.clip(cobertura_nival.geometry.apply(mapping), cobertura_nival.crs, drop=False)
     
@@ -99,11 +94,10 @@ def main():
     plot_areas.columns = ['Area']
     plot_areas = plot_areas[plot_areas['Area'] > 20]
     ax = plot_areas.rolling(15).mean().plot(rot = 90)
-#     xlabel = plot_areas.index.strftime("%b %Y").to_list(), rot = 90
-#    ax.set_xticks(plot_areas.index, times.strftime("%b %Y").to_list(), rotation = 90)
-#    rolling_windows = plot_areas.rolling(15, min_periods=1)
-#    plot_areas_mm = rolling_windows.mean().plot()
     ax.set_ylabel('Cobertura glaciar ($km^2$)')
     ax.set_xlabel('')
     ax.set_ylim(bottom =0)
     ax.grid()
+    
+if __name__ == '__main__':
+    main()
