@@ -71,6 +71,10 @@ def main(folder = '/home/carlos/Downloads', nc_cloud = 'ls8_toa_2013_2020_icesno
         except:
             areas_glaciares[i] = 0
             print('muchas nubes')
+            clip[i] = np.nan
+            gc.collect()
+            del nc_ua
+            del snow
             continue
         nc_ua = nc_ua.where(snow.isin([336, 368, 400, 432, 848, 880, 912, 944, 1352, 324, 388, 836, 900, 1348]), other=np.nan) 
     
@@ -82,11 +86,6 @@ def main(folder = '/home/carlos/Downloads', nc_cloud = 'ls8_toa_2013_2020_icesno
     
         clipped = nc_ua.rio.clip(cobertura_nival.geometry.apply(mapping), cobertura_nival.crs, drop=False)
     
-        time = np.arange('2000', '2005', dtype='datetime64[D]')
-        test_array = xarray.DataArray(np.zeros(len(time)), coords={'time': time}, dims=['time'])    
-        ind_start = (test_array.indexes['time'] == pd.Timestamp('2001-01-01')).argmax()
-        ind_end = (test_array.indexes['time'] == pd.Timestamp('2001-12-31')).argmax()
-        test_array[ind_start:ind_end + 1] = np.ones(365)
     #numero pixeles glaciar dentro de la cuenca
 
         clip[i] =   clipped.values   
@@ -107,8 +106,20 @@ def main(folder = '/home/carlos/Downloads', nc_cloud = 'ls8_toa_2013_2020_icesno
     ax.set_ylim(bottom =0)
     ax.grid()
     
-    clip.resample(time="1Y").mean()
-    media_first = clip.sel(time=slice('2013-01-01', '2015-12-31')).groupby('time.year').mean()
+    media_first = clip.sel(time=slice('2013-01-01', '2014-12-31'))
+    media_first_mean = media_first.resample(time = '1Y').median()[0]
+    media_last =  clip.sel(time=slice('2015-01-01', '2020-08-21'))
+    media_last_mean = media_last.resample(time = '1Y').median()[-1]
+        
+    first_mean_raster = media_first_mean.rio.to_raster("first_glacier.tif")
+    last_mean_raster = media_last_mean.rio.to_raster("last_glacier.tif")
+    
+    x = media_last_mean.x.values
+    y = media_last_mean.y.values
+    plt.pcolormesh(x, y, media_first_mean.values, cmap = 'winter', vmin = 3, vmax = 70, edgecolors='k', linewidths=4)
+    plt.pcolormesh(x, y, media_last_mean.values, cmap = 'autumn', vmin = 3, vmax = 70, edgecolors='k', linewidths=4)
+
+    plt.show()
 
 if __name__ == '__main__':
     main()
