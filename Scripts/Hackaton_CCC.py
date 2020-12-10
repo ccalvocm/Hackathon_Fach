@@ -96,7 +96,7 @@ for i in range(round(len(tiempo))):
 
     nc_ua  = nirswir[i,:,:]
 
-    a = ndimage.interpolation.zoom(nc_ua,.5)  # (20, 40)
+#    a = ndimage.interpolation.zoom(nc_ua,.5)  # (20, 40)
 
 
 #    swir1_flag = swir1[i,:,:].values[swir1[i,:,:].values == -9999]
@@ -108,7 +108,7 @@ for i in range(round(len(tiempo))):
 
     thres = dicc[tiempo.index[i].month]
 #        thres = 2
-    nc_ua = nc_ua.where(((nc_ua >= thres) & (nc_ua <= 3e10)), other=np.nan) 
+    nc_ua = nc_ua.where(((nc_ua >= thres) & (nc_ua <= 30)), other=np.nan) 
 
 ############# Calculate mask
 
@@ -120,11 +120,11 @@ for i in range(round(len(tiempo))):
     areas_glaciares[i] = area_glaciar
     gc.collect()
     del nc_ua
+#    del a
         
 plt.close("all")
-plot_areas = pd.DataFrame(rolling_windows.mean())
-plot_areas = plot_areas.resample('YS').mean()
-rolling_windows = plot_areas.rolling(3, min_periods=1)
+plot_areas = pd.DataFrame(areas_glaciares, index = tiempo.index)
+rolling_windows = plot_areas.rolling(20, min_periods=1)
 plot_areas_mm = rolling_windows.mean().plot()
 
 plt.plot(tiempo.index.strftime("%b %Y"), areas_glaciares)
