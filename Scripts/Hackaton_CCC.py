@@ -94,7 +94,7 @@ def main():
     plot_areas = pd.DataFrame(areas_glaciares, index = times)
     plot_areas.columns = ['Area']
     plot_areas = plot_areas[plot_areas['Area'] > 20]
-    ax = plot_areas.rolling(1).mean().plot(rot = 90)
+    ax = plot_areas.rolling(15).mean().plot(rot = 90)
 #     xlabel = plot_areas.index.strftime("%b %Y").to_list(), rot = 90
 #    ax.set_xticks(plot_areas.index, times.strftime("%b %Y").to_list(), rotation = 90)
 #    rolling_windows = plot_areas.rolling(15, min_periods=1)
