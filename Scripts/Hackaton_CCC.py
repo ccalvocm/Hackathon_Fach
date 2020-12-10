@@ -70,7 +70,13 @@ def main():
         thres = dicc[times[i].month]
         thres = 4
         
-        nc_ua = nc_ua.where(~snow.isin([328, 392, 840, 904, 1350, 352, 368, 416, 432, 480, 864, 880, 928, 944, 992]), other=np.nan) 
+        nc_ua = nc_ua.where(~snow.isin([352, 368, 416, 432, 480, 864, 880, 928, 944, 992]), other=np.nan) 
+        try:
+            nc_ua = nc_ua.interpolate_na(dim="x", method="nearest", fill_value="extrapolate")
+        except:
+            areas_glaciares[i] = 0
+            print('muchas nubes')
+            continue
         nc_ua = nc_ua.where(snow.isin([336, 368, 400, 432, 848, 880, 912, 944, 1352, 324, 388, 836, 900, 1348]), other=np.nan) 
     
         nc_ua = nc_ua.where(((nc_ua >= thres)), other=np.nan) 
