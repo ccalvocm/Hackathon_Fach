@@ -28,23 +28,26 @@ from shapely.geometry import mapping
 #%%
 def main():
     #%%
-    cdo = Cdo()
-    
-    cob_glacial = 'ls8_sr_2013_2020_glaciar (1).nc'
+   
+    cob_nieve = 'ls8_toa_2013_2020_icesnow.nc'
     cob_glacial = 'ls8_toa_2013_2020_glaciar.nc'
-    glaciares = xarray.open_dataset(cob_glacial)
-    nirswir = glaciares['nir_swir']
+    nieve = xarray.open_dataset(cob_nieve)['pixel_qa']
+    nirswir = xarray.open_dataset(cob_glacial)['nir_swir']
     times = pd.read_csv('./time_2013_2020_toa.csv',index_col = 0, parse_dates = True).index
     # assign times
     
     nirswir = nirswir.assign_coords(time = times)
-        
+    nieve = nieve.assign_coords(time = times)  
+    
     #coordenadas
     nirswir.rio.set_spatial_dims(x_dim="x", y_dim="y", inplace=True)
     nirswir.rio.write_crs("epsg:32719", inplace=True)
-    
+
+    nieve.rio.set_spatial_dims(x_dim="x", y_dim="y", inplace=True)
+    nieve.rio.write_crs("epsg:32719", inplace=True)    
     ############# Read shapefile and first feature
     cobertura_nival = geopandas.read_file('glaciares.shp', crs="epsg:32719")
+#    cobertura_nival = geopandas.read_file('Rio_Olivares.shp', crs="epsg:32719")
     
 #    img_nubosas_sombra = np.zeros((len(tiempo.index)))
     areas_glaciares = np.zeros((len(times)))
@@ -59,13 +62,20 @@ def main():
     
     
         nc_ua  = nirswir[i,:,:]
+        snow = nieve[i,:,:]
             
 #        result = gaussian_filter(nc_ua, sigma=2)
 #        nc_ua.values = result  
         
         thres = dicc[times[i].month]
-        thres = 5
+        thres = 4
+        
+        nc_ua = nc_ua.where(~snow.isin([328, 392, 840, 904, 1350, 352, 368, 416, 432, 480, 864, 880, 928, 944, 992]), other=np.nan) 
+        nc_ua = nc_ua.where(snow.isin([336, 368, 400, 432, 848, 880, 912, 944, 1352, 324, 388, 836, 900, 1348]), other=np.nan) 
+    
         nc_ua = nc_ua.where(((nc_ua >= thres)), other=np.nan) 
+
+#        328, 392, 840, 904, 1350, 352, 368, 416, 432, 480, 864, 880, 928, 944, 992
         
     ############# Calculate mask
     
@@ -76,7 +86,7 @@ def main():
         areas_glaciares[i] = area_glaciar
         gc.collect()
         del nc_ua
-    #    del a
+        del snow
   #%%          
     plt.close("all")
     plot_areas = pd.DataFrame(areas_glaciares, index = times)
