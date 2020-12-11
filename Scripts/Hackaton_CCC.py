@@ -48,10 +48,7 @@ def main(folder = './', nc_cloud = 'ls8_toa_2013_2020_icesnow.nc' , nc_glaciar =
     
     areas_glaciares = np.zeros((len(times)))
        
-    ############# Read NetCDF variables
-    default = 2
-    dicc = {1 : default, 2: default, 3: default ,4: default ,5: default , 6: 2.2, 7: 2.1, 8: 3, 
-            9: 1.9, 10: default, 11: 1.9, 12: 1.5}
+
     #for i in range(round(len(tiempo[0:41]))): 
     for i in range(round(len(times))): 
     
@@ -59,7 +56,6 @@ def main(folder = './', nc_cloud = 'ls8_toa_2013_2020_icesnow.nc' , nc_glaciar =
         nc_ua  = nirswir[i,:,:]
         snow = nieve[i,:,:]
                    
-        thres = dicc[times[i].month]
         thres = 3
         
         #Filtrado de nubes y relleno
