@@ -22,6 +22,7 @@ def main(folder = './', nc_cloud = 'ls8_toa_2013_2020_icesnow.nc' , nc_glaciar =
     import gc
     import rioxarray
     import xarray
+    from shapely.geometry import mapping
 
     cob_nieve = folder + '//'+ nc_cloud
     cob_glacial = folder + '//'+ nc_glaciar
