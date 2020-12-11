@@ -10,7 +10,7 @@ Created on Mon Dec  7 23:00:30 2020
 
 
 #%%
-def main(folder = '/home/carlos/Downloads', nc_cloud = 'ls8_toa_2013_2020_icesnow.nc' , nc_glaciar = 'ls8_toa_2013_2020_glaciar.nc', df_times = './time_2013_2020_toa.csv'):
+def main(folder = './', nc_cloud = 'ls8_toa_2013_2020_icesnow.nc' , nc_glaciar = 'ls8_toa_2013_2020_glaciar.nc', df_times = './time_2013_2020_toa.csv'):
     #%%
     
     import geopandas
@@ -111,8 +111,11 @@ def main(folder = '/home/carlos/Downloads', nc_cloud = 'ls8_toa_2013_2020_icesno
     
     media_first = clip.sel(time=slice('2013-01-01', '2013-12-31'))
     media_first_mean = media_first.resample(time = '1Y').mean()[0]
+    media_first_mean.to_netcdf('cobertura_glaciar_media_2013.nc')
     media_last =  clip.sel(time=slice('2020-01-01', '2020-08-21'))
     media_last_mean = media_last.resample(time = '1Y').mean()[-1]
+    media_last_mean.to_netcdf('cobertura_glaciar_media_2020.nc')
+
     
     x = media_last_mean.x.values
     y = media_last_mean.y.values
