@@ -128,7 +128,11 @@ def main(folder = '/home/carlos/Downloads', nc_cloud = 'ls8_toa_2013_2020_icesno
     plt.xlabel('Este (m)')
     plt.ylabel('Norte (m)')
 
-#    plt.legend([rect("r"), ["high"])
+def Temperatura(df_folder = '/home/carlos/Downloads/modis_temp.xlsx'):
+    df_t = pd.read_excel(df_folder, index_col = 1, parse_dates = True)
+    df_t['LST'].resample('YS').mean().plot()
+    plt.ylabel('Temperatura media de la superficie terrestre (°C)')
+    
 #%%
 if __name__ == '__main__':
     main()

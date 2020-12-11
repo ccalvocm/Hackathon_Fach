@@ -1,0 +1,169 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Fri Dec 11 01:02:31 2020
+
+@author: carlos
+"""
+
+
+// estimación de obtención de LST mediante el uso de landsat 8 en GEE
+// en este caso se realiza el filtrado por calidad pixeles. eliminando nubes.
+
+ 
+
+var geometry =
+    /* color: #d63000 */
+    /* displayProperties: [
+      {
+        "type": "rectangle"
+      }
+    ] */
+  ee.Geometry.Polygon(
+        [[[-71.6453595036989, -33.50209657476707],
+          [-71.6453595036989, -33.70911852868319],
+          [-71.36383484549577, -33.70911852868319],
+          [-71.36383484549577, -33.50209657476707]]], null, false);
+
+ 
+
+Map.centerObject(geometry);
+
+ 
+
+// máscara de nubes
+function maskL8sr(image) {
+  // Bits 3 y 5 cloud shadow y cloud
+  var cloudShadowBitMask = (1 << 3);
+  var cloudsBitMask = (1 << 5);
+  // pixel QA band.
+  var qa = image.select('pixel_qa');
+  // Both flags should be set to zero, indicating clear conditions.
+  var mask = qa.bitwiseAnd(cloudShadowBitMask).eq(0)
+                 .and(qa.bitwiseAnd(cloudsBitMask).eq(0));
+  return image.updateMask(mask);
+}
+
+ 
+
+// parámetros de visualización
+var vizParams = {
+  bands: ['B5', 'B6', 'B4'],
+  min: 0,
+  max: 4000,
+  gamma: [1, 0.9, 1.1]
+};
+
+ 
+
+var vizParams2 = {
+ bands: ['B4', 'B3', 'B2'],
+ min: 0,
+ max: 3000,
+ gamma: 1.4,
+};
+
+ 
+
+// Carga la colección de datos de LANDSAT 8:
+ {
+var col2 = ee.ImageCollection('LANDSAT/LC08/C01/T1_SR')
+ .map(maskL8sr)
+ .filterDate('2018-01-01','2018-12-31')
+ .filterBounds(geometry);
+}
+print(col2, 'coleccion');
+
+ 
+
+// Recortar la imagen a un polígono
+var col = col2.map(function(image) {return image.clip(geometry)});
+
+ 
+
+//mediana
+{
+var image = col.median();
+print(image, 'image');
+Map.addLayer(image, vizParams2, 'mediana landsat');
+}
+
+ 
+
+// NDVI:
+{
+ var ndvi = image.normalizedDifference(['B5', 'B4']).rename('NDVI');
+ var ndviParams = {min: -1, max: 1, palette: ['blue', 'white', 'green']};
+ print(ndvi,'ndvi');
+ Map.addLayer(ndvi, ndviParams, 'ndvi');
+}
+
+ 
+
+// Se selecciona la banda 10 que corresponde a la temperatura de brillo, no hay ning+un cálculo de por medio
+var thermal= image.select('B10').multiply(0.1);
+var b10Params = {min: 291.918, 
+ max: 302.382, 
+ palette: ['blue', 'white', 'green']};
+Map.addLayer(thermal, b10Params, 'thermal');
+
+ 
+
+// encontrar el valor mínimo y máximo de NDVI
+{
+var min = ee.Number(ndvi.reduceRegion({
+  reducer: ee.Reducer.min(),
+  geometry: geometry,
+  scale: 30,
+  maxPixels: 1e9
+}).values().get(0));
+print(min, 'min');
+
+ 
+
+var max = ee.Number(ndvi.reduceRegion({
+  reducer: ee.Reducer.max(),
+  geometry: geometry,
+  scale: 30,
+  maxPixels: 1e9
+}).values().get(0));
+print(max, 'max')
+}
+
+ 
+
+//fractional vegetation
+{
+var fv =(ndvi.subtract(min).divide(max.subtract(min))).pow(ee.Number(2)).rename('FV');
+var fvViz = {min: -1, max: 1, palette: ['red', 'yellow', 'green']};
+print(fv, 'fv');
+Map.addLayer(fv, fvViz, 'fv');
+}
+
+ 
+
+// Emisividad
+var a= ee.Number(0.004);
+var b= ee.Number(0.986);
+var EM=fv.multiply(a).add(b).rename('EMM');
+var imageVisParam3 = {min: 0.9865619146722164, max:0.989699971371314};
+Map.addLayer(EM, imageVisParam3,'EMM');
+
+ 
+
+// LST en Celsius Degree bring -273.15
+// NB: In Kelvin don't bring -273.15
+var LST = thermal.expression(
+'(Tb/(1 + (0.00115* (Tb / 1.438))*log(Ep)))-273.15', {
+ 'Tb': thermal.select('B10'),
+ 'Ep': EM.select('EMM')
+}).rename('LST');
+Map.addLayer(LST, {min: 10, 
+ max:40.328077233404645, 
+ palette: [
+    '040274', '040281', '0502a3', '0502b8', '0502ce', '0502e6',
+    '0602ff', '235cb1', '307ef3', '269db1', '30c8e2', '32d3ef',
+    '3be285', '3ff38f', '86e26f', '3ae237', 'b5e22e', 'd6e21f',
+    'fff705', 'ffd611', 'ffb613', 'ff8b13', 'ff6e08', 'ff500d',
+    'ff0000', 'de0101', 'c21301', 'a71001', '911003'
+ ]},'LST con Landsat 8');
