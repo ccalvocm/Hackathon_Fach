@@ -93,33 +93,42 @@ def main(folder = '/home/carlos/Downloads', nc_cloud = 'ls8_toa_2013_2020_icesno
         areas_glaciares[i] = area_glaciar
         gc.collect()
         del nc_ua
-        del snow
         del clipped
-  #%%          
+
+    nirswir.close()
+    nieve.close()
+  #%% Graficar
+          
+
     plt.close("all")
     plot_areas = pd.DataFrame(areas_glaciares, index = times)
     plot_areas.columns = ['Area']
     plot_areas = plot_areas[plot_areas['Area'] > 20]
+    retroceso = (plot_areas.resample('Y').mean().iloc[-1]-plot_areas.resample('Y').mean().iloc[0])/plot_areas.resample('Y').mean().iloc[0]
     ax = plot_areas.rolling(15).mean().plot(rot = 90)
     ax.set_ylabel('Cobertura glaciar ($km^2$)')
     ax.set_xlabel('')
     ax.set_ylim(bottom =0)
     ax.grid()
     
-    media_first = clip.sel(time=slice('2013-01-01', '2014-12-31'))
-    media_first_mean = media_first.resample(time = '1Y').median()[0]
-    media_last =  clip.sel(time=slice('2015-01-01', '2020-08-21'))
-    media_last_mean = media_last.resample(time = '1Y').median()[-1]
-        
-    first_mean_raster = media_first_mean.rio.to_raster("first_glacier.tif")
-    last_mean_raster = media_last_mean.rio.to_raster("last_glacier.tif")
+    media_first = clip.sel(time=slice('2013-01-01', '2013-12-31'))
+    media_first_mean = media_first.resample(time = '1Y').mean()[0]
+    media_last =  clip.sel(time=slice('2020-01-01', '2020-08-21'))
+    media_last_mean = media_last.resample(time = '1Y').mean()[-1]
     
     x = media_last_mean.x.values
     y = media_last_mean.y.values
-    plt.pcolormesh(x, y, media_first_mean.values, cmap = 'winter', vmin = 3, vmax = 70, edgecolors='k', linewidths=4)
-    plt.pcolormesh(x, y, media_last_mean.values, cmap = 'autumn', vmin = 3, vmax = 70, edgecolors='k', linewidths=4)
+    
+#   
+    plt.figure(figsize = (16,19)) 
+    plt.pcolormesh(x, y, media_first_mean.values, cmap = 'afmhot', vmin = 3, vmax = 200, linewidths = 4, label='y0')
 
-    plt.show()
+    plt.pcolormesh(x, y, media_last_mean.values, cmap = 'cool', vmin = 3, vmax = 200, linewidths = 0.1, label='y1')
+        
+    plt.xlabel('Este (m)')
+    plt.ylabel('Norte (m)')
 
+#    plt.legend([rect("r"), ["high"])
+#%%
 if __name__ == '__main__':
     main()
