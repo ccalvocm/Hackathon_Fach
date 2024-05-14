@@ -41,11 +41,16 @@ def calculate_nir_swir_landsat8(image):
     # adjust scale and offset
     # mask swir where it is different from 0, else it is 1e-8
     swir = image.select('B6').multiply(2.75e-05).add(-0.2).where(image.select('B6').neq(0),1e-8)
-    return nir.divide(swir)
+    # return nir/swir renamed as nir_swir
+    return nir.divide(swir).rename('nir_swir')
 
 def filter_nir_swir(image):
     # retrun values greater than 3, else 0
     return image.gt(3).where(image.gt(3),0)
+
+def mask_nir_swir(image):
+    # mask values grater than 3 for further computations of area
+    return image.updateMask(image.gt(3))
 
 def fixMultipoly(geo):
     if 'MultiPolygon' in geo.geometry.iloc[0].geom_type:
@@ -83,9 +88,9 @@ def load_glacier_shapefile(path=os.path.join('..','geoData','glaciaresOlivares.s
 
 def calculate_area(image):
     # calculate sum of total area in EPSG 32719 of non zero pixels of image
-    return image.mask(image).reduceRegion(reducer=ee.Reducer.sum(),
-                                          geometry=image.geometry(),
-                                          scale=30)
+    return image.reduceRegion(reducer=ee.Reducer.sum(),
+                               geometry=image.geometry(),
+                                 scale=30).getInfo()
 
 
 def main():
@@ -99,27 +104,76 @@ def main():
     glacier_fc = gdf2FeatureCollection(glacier_shapefile)
 
     # load landsat 8 imagecollection and filterbounds
-    landsat8 = load_landsat8_imagecollection('2015-01-01', '2024-05-02')
+    landsat8 = load_landsat8_imagecollection('2021-01-01', '2021-12-31')
 
     # filter bounds
-    landsat8 = landsat8.filterBounds(glacier_fc).map(lambda image: image\
-    .clip(glacier_fc)).map(lambda image: image.set('system:time_start', \
-    image.get('system:time_start'))).map(lambda image: filter_landsat8_clouds_bitwise(image))
+    def clip_image(image):
+        return image.clip(glacier_fc)
+
+    def set_time_start(image):
+        return image.set('system:time_start', image.get('system:time_start'))
+
+    landsat8 = landsat8.filterBounds(glacier_fc).map(clip_image).map(set_time_start).map(filter_landsat8_clouds_bitwise)
 
     # calculate ndvi
-    nir_swir = landsat8.map(lambda image: calculate_nir_swir_landsat8(image))\
-        .map(lambda image: filter_nir_swir(image))
+    nir_swir = landsat8.map(calculate_nir_swir_landsat8).map(mask_nir_swir)
 
-    # calculate area by date
-    area = nir_swir.map(calculate_area)
+    # calculate an imagecollection with the yearly means of nir_swir
+    # Calculate yearly means of nir_swir
+    def calculate_yearly_mean(image_collection):
+        def reduce_by_year(year, images):
+            yearly_mean = images.mean()
+            return ee.Image(yearly_mean).set('year', year)
 
-    # plot first image from nir_swir using geemap
-    nir_swir_first = nir_swir.mean()
-    # plot using geemap
-    Map = geemap.Map()
-    Map.addLayer(nir_swir_first, {'min': 4, 'max': 1000, 'palette': ['blue', 'white', 'green']})
-    Map
+        years = ee.List(image_collection.aggregate_array('system:time_start')
+                        .map(lambda time: ee.Date(time).get('year')))
+        unique_years = years.distinct()
 
+        yearly_means = unique_years.map(lambda year: reduce_by_year(year,
+                image_collection.filter(ee.Filter.calendarRange(year, 
+                                                                year,
+                                                                  'year'))))
 
+        return ee.ImageCollection(yearly_means)
 
+    nir_swir_yearly_mean = calculate_yearly_mean(nir_swir)
+
+    def calculate_area(image):
+        return image.set('area', image.reduceRegion(reducer=ee.Reducer.sum(),
+                                                    geometry=image.geometry(),
+                                                    scale=30,
+                                                    maxPixels=1e13).get('nir_swir'))
+
+    # Filter out images with missing values
+    nir_swir_filtered = nir_swir_yearly_mean.filter(ee.Filter.notNull(['nir_swir']))
+
+    # Compute area for each non-masked pixel in filtered image collection nir_swir
+    area_list = nir_swir_filtered.map(calculate_area)
+
+    # Convert to pandas dataframe
+    df = pd.DataFrame.from_records(area_list.getInfo())
+
+    # Print the dataframe
+    print(df)
+
+    map = geemap.Map()
+    map.addLayer(nir_swir.mean())
+    map
+
+    area_list = nir_swir.map(calculate_area)
+
+    # convert to pandas dataframe
+    df = pd.DataFrame(area_list.getInfo())
+
+    # print the dataframe
+    print(df)
+
+    # print max value for nir_swir.mean()
+    print(nir_swir.mean().reduceRegion(reducer=ee.Reducer.max(), 
+                                        scale=30,
+                                        maxPixels=1e13,
+                                        geometry=glacier_fc).getInfo())
+    map=geemap.Map()
+    map.addLayer(nir_swir.mean())
+    map
 
