@@ -25,15 +25,15 @@ def filter_landsat8_clouds_bitwise(image):
     qa = image.select('pixel_qa')
     mask = qa.bitwiseAnd(cloud_shadow_bit_mask).eq(0).And(qa.bitwiseAnd(clouds_bit_mask).eq(0))
 
-    return image.updateMask(mask)
-    
     # # If more than 40864234 pixels are masked, return everything masked
-    # masked_pixels = mask.reduceRegion(reducer=ee.Reducer.sum(), geometry=mask.geometry(), scale=30)
-    # if masked_pixels.get('constant').getInfo() > 40864234:
-    #     return mask.updateMask(mask.eq(0))
-    # else:
-    #     return mask
-    
+    masked_pixels = mask.reduceRegion(reducer=ee.Reducer.sum(), geometry=mask.geometry(), scale=30,
+                                      maxPixels=1e13)
+        
+    return ee.Algorithms.If(ee.Number(masked_pixels.get('pixel_qa')).gt(40864234),
+                            ee.Image(0),
+                            image.updateMask(mask))
+
+
 def calculate_nir(image):
     return image.normalizedDifference(['B5', 'B4'])
 
@@ -92,7 +92,7 @@ def gdf2FeatureCollection(gs):
     return ee.FeatureCollection(features)
 
 def load_glacier_shapefile(path=os.path.join('..','geoData','glaciaresOlivares.shp')):
-    glacier_shapefile = gpd.GeoDataFrame([],geometry=gpd.read_file(path).buffer(5e1))
+    glacier_shapefile = gpd.GeoDataFrame([],geometry=gpd.read_file(path).buffer(0))
     return glacier_shapefile
 
 def calculate_area(image):
@@ -101,6 +101,19 @@ def calculate_area(image):
                                geometry=image.geometry(),
                                  scale=30).getInfo()
 
+# filter bounds
+def clip_image(image):
+    return image.clip(glacier_fc)
+
+def set_time_start(image):
+    return image.set('system:time_start', image.get('system:time_start'))
+
+# calculate ndvi
+def calculate_area(image):
+    # calculate sum of total area in EPSG 32719 of non zero pixels of image
+    return ee.Image(image.reduceRegion(reducer=ee.Reducer.sum(),
+                                geometry=glacier_fc.geometry(),
+                                scale=30).getInfo())
 def main():
     ee.Authenticate()
     ee.Initialize()
@@ -112,49 +125,26 @@ def main():
     glacier_fc = gdf2FeatureCollection(glacier_shapefile)
 
     # load landsat 8 imagecollection and filterbounds
-    landsat8 = load_landsat8_imagecollection('2017-01-01', '2017-12-31')
+    yrs=['2015','2016','2017','2018','2019','2020','2021','2022','2023']
 
-    # filter bounds
-    def clip_image(image):
-        return image.clip(glacier_fc)
+    df=pd.DataFrame(index=yrs,columns=['area'])
 
-    def set_time_start(image):
-        return image.set('system:time_start', image.get('system:time_start'))
+    for yr in yrs:
+        landsat8=load_landsat8_imagecollection(yr+'-04-01',str(int(yr)+1)+'-03-31')
 
-    landsat8 = landsat8.filterBounds(glacier_fc).map(clip_image).map(set_time_start)\
-        .map(filter_landsat8_clouds_bitwise)
+    # landsat8 = load_landsat8_imagecollection('2017-01-01', '2017-12-31')
+        landsat8 = landsat8.filterBounds(glacier_fc).map(clip_image).map(set_time_start)\
+            .map(filter_landsat8_clouds_bitwise)
 
-    # calculate ndvi
-    def calculate_area(image):
-        # calculate sum of total area in EPSG 32719 of non zero pixels of image
-        return ee.Image(image.reduceRegion(reducer=ee.Reducer.sum(),
-                                   geometry=glacier_fc.geometry(),
-                                   scale=30).getInfo())
+        nir_swir = landsat8.map(calculate_nir_swir_landsat8).map(mask_nir_swir)
 
-    nir_swir = landsat8.map(calculate_nir_swir_landsat8).map(mask_nir_swir)
+        nir_swir_mean= nir_swir.mean()
 
-    nir_swir_mean= nir_swir.mean()
-
-
-    maskedArea = ee.Image.pixelArea().mask(nir_swir_mean.gt(3))
-    print(maskedArea.reduceRegion(reducer=ee.Reducer.sum(),
-    geometry=glacier_fc.geometry(),scale=30,maxPixels=1e13).get('area').getInfo())
-
-
-
-
-    # Filter out images with missing values
-    nir_swir_filtered = nir_swir.filter(ee.Filter.notNull(['nir_swir']))
-
-    # Compute area for each non-masked pixel in filtered image collection nir_swir
-    area_list = calculate_area(nir_swir_mean)
-
-    # Calculate the sum of the area in square meters
-    area_sum = area_list.reduce(ee.Reducer.sum())
-
-    # Print the sum of the area
-    print(area_sum.getInfo())
-  
+        maskedArea = ee.Image.pixelArea().mask(nir_swir_mean.gt(3))
+        area=maskedArea.reduceRegion(reducer=ee.Reducer.sum(),
+        geometry=glacier_fc.geometry(),scale=30,maxPixels=1e13).get('area').getInfo()
+        print(area)
+        df.loc[yr,'area']=area
 
 
     # def calculate_yearly_mean(image_collection):
@@ -191,7 +181,7 @@ def main():
     # print(df)
 
     map = geemap.Map()
-    map.addLayer(nir_swir.mean())
+    map.addLayer(nir_swir_mean)
     map
 
     # area_list = nir_swir.map(calculate_area)
