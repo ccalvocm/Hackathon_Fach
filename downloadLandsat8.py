@@ -114,14 +114,26 @@ def calculate_nir_swir_landsat8(image):
     # mask swir where it is different from 0, else it is 1e-8
     swir = image.select('B6').where(image.select('B6').neq(0),1e-8)
     # return nir/swir renamed as nir_swir
-    return nir.divide(swir).rename('nir_swir')
+    # add nir.divide(swir) to image as a new band called nir_swir
+    return image.addBands(nir.divide(swir).rename('nir_swir'))
+
+def filter_landsat8_clouds(image):
+    # get QA_PIXEL band from image
+    qa = image.select('QA_PIXEL')
+    # get cloud and cirrus bits
+    cloud = 1 << 5
+    cirrus = 1 << 6
+    # get cloud and cirrus masks
+    mask = qa.bitwiseAnd(cloud).eq(0).And(qa.bitwiseAnd(cirrus).eq(0))
+    # return image with mask applied
+    return image.updateMask(mask)
 
 def download(collection, folderName):
     # login()
 
     # 2. define python dates
-    fechaIni = datetime.datetime(2015, 1, 1)
-    fechaFin = datetime.datetime(2016, 12, 1)
+    fechaIni = datetime.datetime(2013, 3, 18)
+    fechaFin = datetime.datetime(2024, 4, 1)
     # print(fechaIni, fechaFin)
     # print(pythonDate2eeDate(fechaFin))
 
@@ -137,51 +149,53 @@ def download(collection, folderName):
     # rectangle = ee.Geometry.Rectangle([llx, lly, urx, ury])
     imageCollectionRegion = imageCollection.filterBounds(rectangle)
 
+    # filter clouds
+    imageCollectionRegion = imageCollectionRegion.map(filter_landsat8_clouds)
+
     # 5. select the band
     # band = "evaporation_from_open_water_surfaces_excluding_oceans_sum"
     # map calculate_nir_swir_landsat8 over landsat8
     nir_swir = imageCollectionRegion.map(calculate_nir_swir_landsat8)
 
-    imageCollectionBand = nir_swir.select('nir_swir')
+    # set  'system:time_start' property to the date of the image
+    imageCollectionBand = nir_swir.map(lambda image: image.set('system:time_start', 
+    image.date().millis()))
+
     f = open("log.txt", "w")
 
     # 6. output folder
     outFolder(folderName)
-    rutaDl = os.path.join(folderName)
+    rutaDl = folderName
 
-    # 7. select date
-    # iterate over imageCollectionBand dates
-    
-    for feature in imageCollectionBand.getInfo()['features']:
-        date = feature['properties']['system:time_start']
+   # 7. select date
+    # iterate over imageCollectionBand dates avoiding 'system:time_start' property        
+    for image in imageCollectionBand.getInfo()['features']:
+        date = pd.to_datetime(image['properties']['system:index'][-8:])
         print(f"Attempting download image for {date}")
         try:
-            imageCollectionDate = imageCollectionBand.filterDate(date).min().clip(rectangle)
-
+            # filter image from imageCollectionBand date
+            imageCollectionDate = imageCollectionBand.filter(ee.Filter.date(date,
+             date+pd.Timedelta(days=1))).first().clip(rectangle)
+            # get imageCollectionDate bands
+            imageCollectionDate = imageCollectionDate.select('nir_swir')
             url = imageCollectionDate.getDownloadURL({
                 'scale': 30,
                 'crs': 'EPSG:32719',
                 'format': 'GEO_TIFF',
-                'region': rectangle})
+                'region': rectangle.geometry().bounds().getInfo()['coordinates']})
             print(url)
-            # print(f"Attempting download image for {date} OK!")
             response = requests.get(url, stream=True)
-            filePath = os.path.join(rutaDl, f"tmax{date}.tif")
-
-            # zip
-            with open(os.path.join(rutaDl, band+'_'+date+'.tif'), "wb") as fd:
+            date = date.strftime("%Y-%m-%d")
+            filePath = os.path.join(rutaDl, f"l8_{date}.tif")
+            with open(filePath, "wb") as fd:
                 for chunk in response.iter_content(chunk_size=1024):
                     fd.write(chunk)
             fd.close()
-
         except:
-            # print(f"Attempting download image for {date} FAILED!")
             f.write(f"{date}\n")
-
 
 if __name__ == '__main__':
     collection = "LANDSAT/LC08/C02/T1_TOA"
-    band = "B5"  # total_precipitation_sum, temperature_2m, 
     folderName = "l8"
     outFolder(folderName=folderName)
     
