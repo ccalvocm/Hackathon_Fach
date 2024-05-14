@@ -16,39 +16,45 @@ import ee
 
 # load landsat 8 imagecollection using earth engine api
 def load_landsat8_imagecollection(start_date, end_date):
-    landsat8 = ee.ImageCollection('LANDSAT/LC08/C01/T1_SR').filterDate(start_date, end_date)
+    landsat8 = ee.ImageCollection('LANDSAT/LC08/C02/T1_L2').filterDate(start_date, end_date)
     return landsat8
+
+def filter_landsat8_clouds(image):
+    # get QA_PIXEL band from image
+    qa = image.select('QA_PIXEL')
+    # get cloud and cirrus bits
+    cloud = 1 << 5
+    cirrus = 1 << 6
+    # get cloud and cirrus masks
+    mask = qa.bitwiseAnd(cloud).eq(0).And(qa.bitwiseAnd(cirrus).eq(0))
+    # return image with mask applied
+    return image.updateMask(mask)
 
 def filter_landsat8_clouds_bitwise(image):
     cloud_shadow_bit_mask = 1 << 3
     clouds_bit_mask = 1 << 5
-    qa = image.select('pixel_qa')
+    qa = image.select('QA_PIXEL')
     mask = qa.bitwiseAnd(cloud_shadow_bit_mask).eq(0).And(qa.bitwiseAnd(clouds_bit_mask).eq(0))
 
     # # If more than 40864234 pixels are masked, return everything masked
     masked_pixels = mask.reduceRegion(reducer=ee.Reducer.sum(), geometry=mask.geometry(), scale=30,
                                       maxPixels=1e13)
+    # return 0 if masked_pixels QA_PIXEL is greater than 20% of the total pixels of the image
         
-    return ee.Algorithms.If(ee.Number(masked_pixels.get('pixel_qa')).gt(408642.34),
-                            ee.Image(0),
-                            image.updateMask(mask))
-
-def calculate_nir(image):
-    return image.normalizedDifference(['B5', 'B4'])
-
-def calcularte_ndgi_landsat8(image):
-    return image.normalizedDifference(['B3', 'B5'])
+    return ee.Algorithms.If(ee.Number(masked_pixels.get('QA_PIXEL')).gt(408642.34),
+                            image.updateMask(mask),ee.Image(0)
+                            )
 
 # calcular NIR/SWIR from landsat 8 surface reflectance
 def calculate_nir_swir_landsat8(image):
     # get NIR from image
-    nir = image.select('B5')
+    nir = image.select('SR_B5')
     # adjust scale and offset
-    nir = nir.multiply(1e-3).add(-0.2)
+    nir = nir.multiply(2.75e-05).add(-0.2)
     # get SWIR from image
     # adjust scale and offset
     # mask swir where it is different from 0, else it is 1e-8
-    swir = image.select('B6').multiply(1e-3).add(-0.2).where(image.select('B6').neq(0),1e-8)
+    swir = image.select('SR_B6').multiply(2.75e-05).add(-0.2).where(image.select('SR_B6').neq(0),1e-8)
     # return nir/swir renamed as nir_swir
     return nir.divide(swir).rename('nir_swir')
 
@@ -99,11 +105,6 @@ def calculate_area(image):
     return image.reduceRegion(reducer=ee.Reducer.sum(),
                                geometry=image.geometry(),
                                  scale=30).getInfo()
-
-# filter bounds
-def clip_image(image):
-    return image.clip(glacier_fc)
-
 def set_time_start(image):
     return image.set('system:time_start', image.get('system:time_start'))
 
@@ -113,6 +114,9 @@ def calculate_area(image):
     return ee.Image(image.reduceRegion(reducer=ee.Reducer.sum(),
                                 geometry=glacier_fc.geometry(),
                                 scale=30).getInfo())
+def clip_image(image):
+    return image.clip(glacier_fc)
+
 def main():
     ee.Authenticate()
     ee.Initialize()
@@ -124,26 +128,31 @@ def main():
     glacier_fc = gdf2FeatureCollection(glacier_shapefile)
 
     # load landsat 8 imagecollection and filterbounds
-    yrs=['2013','2014','2015','2016','2017','2018','2019','2020','2021','2022','2023']
+    yrs=['2013','2014','2015','2016','2017','2018','2019','2020','2021',
+    '2022','2023']
 
     df=pd.DataFrame(index=yrs,columns=['area'])
 
     for yr in yrs:
-        landsat8=load_landsat8_imagecollection(yr+'-11-01',str(int(yr)+1)+'-03-31')
+        landsat8 = load_landsat8_imagecollection(yr+'-12-01', 
+        str(int(yr)+1)+'-03-31')
 
-    # landsat8 = load_landsat8_imagecollection('2017-01-01', '2017-12-31')
-        landsat8 = landsat8.filterBounds(glacier_fc).map(clip_image).map(set_time_start)\
-            .map(filter_landsat8_clouds_bitwise)
+        # Filter out images with missing values
+        landsat8 = landsat8.filterBounds(glacier_fc).map(clip_image)\
+            .map(set_time_start).map(filter_landsat8_clouds)
 
-        nir_swir = landsat8.map(calculate_nir_swir_landsat8).map(mask_nir_swir)
+        # Check if bands SR_B5 and SR_B6 exist in the Landsat 8 image
+        nir_swir = landsat8.filter(ee.Filter.listContains('system:band_names', 
+        'SR_B5')).filter(ee.Filter.listContains('system:band_names', 
+        'SR_B6')).map(calculate_nir_swir_landsat8).map(mask_nir_swir)
 
-        nir_swir_mean= nir_swir.mean()
+        # Calculate the mean of NIR_SWIR
+        nir_swir_mean = nir_swir.mean()
 
         maskedArea = ee.Image.pixelArea().mask(nir_swir_mean.gt(3))
-        area=maskedArea.reduceRegion(reducer=ee.Reducer.sum(),
-        geometry=glacier_fc.geometry(),scale=30,maxPixels=1e13).get('area').getInfo()
+        area = maskedArea.reduceRegion(reducer=ee.Reducer.sum(), geometry=glacier_fc.geometry(), scale=30, maxPixels=1e13).get('area').getInfo()
         print(area)
-        df.loc[yr,'area']=area
+        df.loc[yr, 'area'] = area
 
 
     # def calculate_yearly_mean(image_collection):
