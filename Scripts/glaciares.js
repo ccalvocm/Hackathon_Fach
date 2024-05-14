@@ -128,3 +128,10 @@ var legendPanel = ui.Panel([legendTitle, colorBar, legendLabels]);
 leftMap.add(legendPanel)
         .setControlVisibility({position: 'bottomleft'})
         .setControlVisibility({position: 'topleft'}); // Add this line to set the legendPanel to the left side of the map.
+
+create an earth engine polygon from the following coordinares:
+[-70.26091827160998,-33.44615635395442]
+1: [-70.02697150728741,-33.44615635395442]
+2: [-70.02697150728741,-33.05355474239959]
+3: [-70.26091827160998,-33.05355474239959]
+4: [-70.26091827160998,-33.44615635395442]

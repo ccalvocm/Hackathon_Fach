@@ -253,8 +253,11 @@ def calculatePixelsArea(folderName):
     import matplotlib.pyplot as plt
 
     fix,ax=plt.subplots()
-    df2.groupby('financial_year')['area'].mean().div(1e6).plot(ax=ax)
-    ax.set_ylabel('Area glaciar promedio ($km^2$)')
+    df2.groupby('financial_year')['area'].mean().div(1e6).plot(ax=ax,
+                                                               linestyle='--',
+                                                               marker='o')
+    ax.set_ylabel('Area glaciar media anual ($km^2$)')
+    ax.set_title('Retroceso glaciar cuenca Río Olivares (2013-2023)')
     ax.set_ylim(0, 86)
     ax.grid()
     ax.set_xlabel('Año hidrológico')
