@@ -19,6 +19,26 @@ var landsat82 = ee.ImageCollection('LANDSAT/LC08/C02/T1_TOA')
 var nir_swir_ratio_l5 = landsat5.select('B4').divide(landsat5.select('B5'));
 var nir_swir_ratio_l8 = landsat8.select('B5').divide(landsat8.select('B6'));
 
+// export to Google Drive nir_swir_ratio_l5 and nir_swir_ratio_l8
+Export.image.toDrive({
+    image: nir_swir_ratio_l5,
+    description: 'nir_swir_ratio_l5',
+    scale: 30,
+    region: table.geometry().bounds(),
+    maxPixels: 1e13,
+    crs: 'EPSG:32719'
+});
+
+Export.image.toDrive({
+    image: nir_swir_ratio_l8,
+    description: 'nir_swir_ratio_l8',
+    scale: 30,
+    region: table.geometry().bounds(),
+    maxPixels: 1e13,
+    crs: 'EPSG:32719'
+});
+
+
 var palettes = require('users/gena/packages:palettes');
 var HSpalette = palettes.kovesi.linear_blue_5_95_c73[7];
 function makeColorBarParams(palette) {

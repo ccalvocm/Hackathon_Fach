@@ -10,6 +10,7 @@ import rioxarray as rxr
 import geopandas as gpd
 import numpy as np
 import json
+from shapely.geometry import mapping
 
 # def time_index_from_filenames(filenames,first=14,last=4):
 def time_index_from_filenames(filenames,first=41,last=33):
@@ -111,7 +112,7 @@ def calculate_nir_swir_landsat8(image):
     nir = nir
     # get SWIR from image
     # adjust scale and offset
-    # mask swir where it is different from 0, else it is 1e-8
+    # mask swir where it is different from 0, else 
     swir = image.select('B6').where(image.select('B6').neq(0),1e-8)
     # return nir/swir renamed as nir_swir
     # add nir.divide(swir) to image as a new band called nir_swir
@@ -177,7 +178,7 @@ def download(collection, folderName):
             imageCollectionDate = imageCollectionBand.filter(ee.Filter.date(date,
              date+pd.Timedelta(days=1))).first().clip(rectangle)
             # get imageCollectionDate bands
-            imageCollectionDate = imageCollectionDate.select('nir_swir')
+            imageCollectionDate = imageCollectionDate.select('B5')
             url = imageCollectionDate.getDownloadURL({
                 'scale': 30,
                 'crs': 'EPSG:32719',
@@ -205,17 +206,58 @@ if __name__ == '__main__':
     download(collection=collection, folderName=folderName)
     files2NETCDF(folderName=folderName)
 
-# open .nc file
-debug=xr.open_dataset(os.path.join("/", "Users", "farrospide", "Downloads",'ERA5', 'snowDepth_netcdf.nc'))
-# plot
-debug.band[0].plot()
+def calculatePixelsArea(folderName):
+    files=os.listdir(folderName)
+    glacier_shapefile = load_glacier_shapefile()
 
-import rioxarray as rxr
-debug=rxr.open_rasterio(os.path.join(folderName,'ERA5', 'netcdf.nc'))
-debug.plot()
+    reference=rxr.open_rasterio(os.path.join('.',
+    'geoData','referenceOlivares.tif'))
 
-import geemap
-ndwiViz = {'min': 0.5, 'max': 10, 'palette': ['00FFFF', '0000FF']}
-Map=geemap.Map()
-Map.addLayer(imageCollectionDate, ndwiViz, 'pp TerraClimate 1990-01-01')
-Map
+    # plot valid pixels of reference
+    # get reference first array data
+    first_band = reference.isel(band=0)
+
+    num_pixels_reference = np.count_nonzero(first_band >0)
+
+    df=pd.DataFrame(index=pd.date_range('2013-03-18','2024-04-1',
+    freq='1D'),columns=['area'])
+
+    for file in files:
+
+        date=pd.to_datetime(file[3:13])
+        xarray=rxr.open_rasterio(os.path.join(folderName,file))
+        xarray = xarray.rio.clip(glacier_shapefile.geometry.apply(mapping),
+                                  glacier_shapefile.crs, drop=True)
+
+        # Assuming 'xarray' is your DataArray and 'glacier_shapefile' is your GeoDataFrame
+        # Reshape the xarray to a 2D shape
+        # calculate area of valid pixels in xarray
+        # Identify valid pixels (assuming NaNs represent invalid data)
+        num_valid_pixels = np.count_nonzero(xarray > 3)
+
+        if num_valid_pixels >0.7*num_pixels_reference:
+            # If each pixel represents 1 square meter
+            area_per_pixel = 900
+
+            # Calculate total area
+            total_area = num_valid_pixels * area_per_pixel
+            df.loc[date, 'area'] = float(total_area)
+
+    # plot xarray
+    # Assuming 'df' is your DataFrame and it has a datetime index
+    df2 = df.dropna()
+
+    df2['financial_year'] = df2.index.map(lambda x: x.year if x.month > 4 else x.year-1)
+
+    # verage by financial year
+    import matplotlib.pyplot as plt
+
+    fix,ax=plt.subplots()
+    df2.groupby('financial_year')['area'].mean().div(1e6).plot(ax=ax)
+    ax.set_ylabel('Area glaciar promedio ($km^2$)')
+    ax.set_ylim(0, 86)
+    ax.grid()
+    ax.set_xlabel('Año hidrológico')
+    plt.savefig(os.path.join('.','Imagenes','retrocesoGlaciar.pdf'),
+                bbox_inches='tight')
+    plt.show()

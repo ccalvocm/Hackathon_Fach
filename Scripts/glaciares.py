@@ -155,6 +155,18 @@ def main():
         df.loc[yr, 'area'] = area
 
 
+    import matplotlib.pyplot as plt
+
+    fix,ax=plt.subplots()
+    df.div(1e6).plot(ax=ax)
+    ax.set_ylabel('Area glaciar promedio ($km^2$)')
+    ax.set_ylim(0, 90)
+    ax.grid()
+    ax.set_xlabel('Año hidrológico')
+    plt.savefig(os.path.join('..','Imagenes','retrocesoGlaciarGEE.pdf'),
+                bbox_inches='tight')
+    plt.show()
+
     # def calculate_yearly_mean(image_collection):
     #     def calculate_mean(year):
     #         start_date = ee.Date.fromYMD(year, 1, 1)
