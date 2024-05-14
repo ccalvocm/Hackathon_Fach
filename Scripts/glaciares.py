@@ -29,10 +29,9 @@ def filter_landsat8_clouds_bitwise(image):
     masked_pixels = mask.reduceRegion(reducer=ee.Reducer.sum(), geometry=mask.geometry(), scale=30,
                                       maxPixels=1e13)
         
-    return ee.Algorithms.If(ee.Number(masked_pixels.get('pixel_qa')).gt(40864234),
+    return ee.Algorithms.If(ee.Number(masked_pixels.get('pixel_qa')).gt(408642.34),
                             ee.Image(0),
                             image.updateMask(mask))
-
 
 def calculate_nir(image):
     return image.normalizedDifference(['B5', 'B4'])
@@ -45,11 +44,11 @@ def calculate_nir_swir_landsat8(image):
     # get NIR from image
     nir = image.select('B5')
     # adjust scale and offset
-    nir = nir.multiply(2.75e-05).add(-0.2)
+    nir = nir.multiply(1e-3).add(-0.2)
     # get SWIR from image
     # adjust scale and offset
     # mask swir where it is different from 0, else it is 1e-8
-    swir = image.select('B6').multiply(2.75e-05).add(-0.2).where(image.select('B6').neq(0),1e-8)
+    swir = image.select('B6').multiply(1e-3).add(-0.2).where(image.select('B6').neq(0),1e-8)
     # return nir/swir renamed as nir_swir
     return nir.divide(swir).rename('nir_swir')
 
@@ -125,12 +124,12 @@ def main():
     glacier_fc = gdf2FeatureCollection(glacier_shapefile)
 
     # load landsat 8 imagecollection and filterbounds
-    yrs=['2015','2016','2017','2018','2019','2020','2021','2022','2023']
+    yrs=['2013','2014','2015','2016','2017','2018','2019','2020','2021','2022','2023']
 
     df=pd.DataFrame(index=yrs,columns=['area'])
 
     for yr in yrs:
-        landsat8=load_landsat8_imagecollection(yr+'-04-01',str(int(yr)+1)+'-03-31')
+        landsat8=load_landsat8_imagecollection(yr+'-11-01',str(int(yr)+1)+'-03-31')
 
     # landsat8 = load_landsat8_imagecollection('2017-01-01', '2017-12-31')
         landsat8 = landsat8.filterBounds(glacier_fc).map(clip_image).map(set_time_start)\
